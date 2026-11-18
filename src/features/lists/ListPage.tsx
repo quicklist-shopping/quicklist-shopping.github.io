@@ -1,6 +1,7 @@
-import { FormEvent, useState } from 'react';
+import { useRef, useState } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CircularProgress, List as MaterialList, TextField, Typography } from '@mui/material';
+import { CircularProgress, List as MaterialList, TextField } from '@mui/material';
 import type { User } from 'firebase/auth';
 import { useList } from './useList';
 import { ItemRow } from './ItemRow';
@@ -11,25 +12,41 @@ export function ListPage({ listId, user, online }: { listId: string; user: User;
   const [newItem, setNewItem] = useState('');
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState('');
+  const submittingRef = useRef(false);
   const navigate = useNavigate();
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const value = newItem.trim();
-    if (saving) return;
+  const addCurrentItem = async () => {
+    if (submittingRef.current || !online) return;
+    const draft = newItem;
+    const value = draft.trim();
     if (!value) {
       setNewItem('');
       return;
     }
+
+    submittingRef.current = true;
     setSaving(true);
     setActionError('');
     try {
       await addItem(value);
-      setNewItem('');
+      setNewItem((current) => current === draft ? '' : current);
     } catch {
       setActionError('Unable to add this item. Check your connection and try again.');
     } finally {
+      submittingRef.current = false;
       setSaving(false);
+    }
+  };
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void addCurrentItem();
+  };
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      void addCurrentItem();
     }
   };
 
@@ -49,19 +66,16 @@ export function ListPage({ listId, user, online }: { listId: string; user: User;
           label="Add item"
           value={newItem}
           onChange={(event) => setNewItem(event.target.value)}
+          onKeyDown={handleInputKeyDown}
           variant="standard"
           fullWidth
           inputProps={{ maxLength: 200, 'aria-label': 'Add item' }}
-          disabled={saving || !online}
+          disabled={!online}
         />
       </form>
       {saving && <CircularProgress color="secondary" size={24} sx={{ mt: 1 }} aria-label="Adding item" />}
       {actionError && <ListErrorDialog message={actionError} onClose={() => setActionError('')} />}
-      {list.items.length === 0 ? (
-        <Typography color="text.secondary" variant="body2" sx={{ mt: 2 }}>
-          Add an item to get started.
-        </Typography>
-      ) : (
+      {list.items.length > 0 && (
         <MaterialList component="nav" className="shopping-list" aria-label="List items">
           {list.items.map((item) => (
             <ItemRow

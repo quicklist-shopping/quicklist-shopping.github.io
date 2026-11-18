@@ -43,15 +43,15 @@ function SignedInApp({ user }: { user: User }) {
 
   return (
     <main className="app-shell">
-      {!online && <Alert severity="warning" sx={{ width: '100%', maxWidth: 360, mb: 1 }}>You're offline. Reconnect before making changes.</Alert>}
       <header className="app-header">
         <NewListButton user={user} online={online} />
-        <Tooltip title={`Signed in as ${user.email || 'Google account'} — sign out`}>
-          <IconButton className="account-button" aria-label="Sign out" onClick={() => void signOut()} disabled={signingOut}>
-            {signingOut ? <CircularProgress size={22} /> : <LogoutIcon />}
-          </IconButton>
-        </Tooltip>
       </header>
+      <Tooltip title={`Signed in as ${user.email || 'Google account'} — sign out`}>
+        <IconButton className="account-button" aria-label="Sign out" onClick={() => void signOut()} disabled={signingOut}>
+          {signingOut ? <CircularProgress size={22} /> : <LogoutIcon />}
+        </IconButton>
+      </Tooltip>
+      {!online && <Alert severity="warning" sx={{ width: '100%', maxWidth: 360, mb: 1 }}>You're offline. Reconnect before making changes.</Alert>}
       {signOutError && <Alert severity="error" sx={{ width: '100%', maxWidth: 360, mb: 1 }}>{signOutError}</Alert>}
       <Routes>
         <Route path="/" element={null} />
