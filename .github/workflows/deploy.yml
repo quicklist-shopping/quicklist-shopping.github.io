@@ -1,0 +1,80 @@
+name: Build and deploy Quicklist
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    env:
+      VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+      VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+      VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+      VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+      VITE_ALLOWED_EMAILS: ${{ vars.VITE_ALLOWED_EMAILS }}
+      VITE_USE_FIREBASE_EMULATORS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - run: npm ci
+
+      - name: Check frontend and Firestore allowlists
+        run: npm run check:allowlist
+
+      - name: Check Firebase build configuration
+        run: |
+          test -n "$VITE_FIREBASE_API_KEY"
+          test -n "$VITE_FIREBASE_AUTH_DOMAIN"
+          test -n "$VITE_FIREBASE_PROJECT_ID"
+          test -n "$VITE_FIREBASE_APP_ID"
+
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:rules
+
+      - name: Set GitHub Pages base path
+        id: pages-path
+        shell: bash
+        run: |
+          REPOSITORY="${GITHUB_REPOSITORY#*/}"
+          if [[ "$REPOSITORY" == "${GITHUB_REPOSITORY_OWNER}.github.io" ]]; then
+            echo 'base=/' >> "$GITHUB_OUTPUT"
+          else
+            echo "base=/${REPOSITORY}/" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build site
+        run: npm run build
+        env:
+          VITE_BASE_PATH: ${{ steps.pages-path.outputs.base }}
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

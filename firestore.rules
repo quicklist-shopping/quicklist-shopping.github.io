@@ -1,0 +1,94 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAllowedUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.auth.token.email is string
+        // Add the exact, verified Google account emails before deploying rules.
+        // The empty list intentionally denies everyone until the owners are specified.
+        && request.auth.token.email in ['krzysztof.kakol89@gmail.com', 'katarzyna.blocka@gmail.com'];
+    }
+
+    function listPath(listId) {
+      return /databases/$(database)/documents/lists/$(listId);
+    }
+
+    function hasListAfterActivity(listId) {
+      let updatedList = getAfter(listPath(listId)).data;
+      return updatedList.updatedAt == request.time
+        && updatedList.updatedBy == request.auth.uid;
+    }
+
+    function validListCreation() {
+      return request.resource.data.keys().hasAll([
+          'schemaVersion', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'schemaVersion', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'
+        ])
+        && request.resource.data.schemaVersion == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    function validListActivityUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['updatedAt', 'updatedBy'])
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    function validItemCreation() {
+      return request.resource.data.keys().hasAll([
+          'name', 'state', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'name', 'state', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 200
+        && request.resource.data.state == 'UNKNOWN'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    function validItemUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['state', 'updatedAt', 'updatedBy'])
+        && request.resource.data.state in ['UNKNOWN', 'IN_CART', 'UNAVAILABLE']
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    match /lists/{listId} {
+      // Lists are opened by known URL, not discovered with a collection query.
+      allow get: if isAllowedUser();
+      allow list: if false;
+      allow create: if isAllowedUser() && validListCreation();
+      allow update: if isAllowedUser() && validListActivityUpdate();
+      allow delete: if false;
+
+      match /items/{itemId} {
+        allow get, list: if isAllowedUser() && exists(listPath(listId));
+        allow create: if isAllowedUser()
+          && exists(listPath(listId))
+          && validItemCreation()
+          && hasListAfterActivity(listId);
+        allow update: if isAllowedUser()
+          && exists(listPath(listId))
+          && validItemUpdate()
+          && hasListAfterActivity(listId);
+        allow delete: if isAllowedUser()
+          && exists(listPath(listId))
+          && hasListAfterActivity(listId);
+      }
+    }
+  }
+}
