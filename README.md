@@ -72,8 +72,12 @@ Firebase web configuration is public and will be present in the generated JavaSc
 Hash routing avoids server-side SPA rewrites on GitHub Pages:
 
 ```text
-https://OWNER.github.io/REPOSITORY/#/          Create a list
-https://OWNER.github.io/REPOSITORY/#/LIST_ID   Open/share a list
+https://OWNER.github.io/REPOSITORY/#/          Create a list (project site)
+https://OWNER.github.io/REPOSITORY/#/LIST_ID   Open/share a list (project site)
+
+# If the repository is named OWNER.github.io, there is no /REPOSITORY/ path:
+https://OWNER.github.io/#/                     Create a list (root site)
+https://OWNER.github.io/#/LIST_ID              Open/share a list (root site)
 ```
 
 The URL fragment stays in the browser, so refreshing a shared list loads the published `index.html` rather than requesting an unavailable server route. Anyone with a list URL who is on the Firebase allowlist can read and edit it; a URL alone does not grant access.

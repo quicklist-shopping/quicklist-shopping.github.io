@@ -4,17 +4,19 @@ Follow these steps in order. You need **one Google account** for Firebase, **one
 
 This guide assumes that **the contents of `source_new/` become the root of a new GitHub repository**. Do **not** upload the old `source/quicklist/` project or put `source_new/` inside another repository unless you also change the workflow paths. The existing `.github/workflows/deploy.yml` expects `package.json`, `firestore.rules`, and `src/` directly at the repository root.
 
-Replace `YOUR_NAME`, `quicklist`, `YOUR_PROJECT_ID`, and the example emails below with your actual values.
+This guide uses your GitHub owner **`quicklist-shopping`** and its repository **`quicklist-shopping.github.io`** as examples. Replace `YOUR_PROJECT_ID` and the example emails below with your actual values.
 
-## 1. Choose your GitHub repository name
+## 1. Use the root GitHub Pages repository
 
-Decide on a repository name, for example `quicklist`. Your eventual site will be:
+For a **main page**, the repository name must exactly match `<owner>.github.io`. Your repository name is already correct:
 
 ```text
-https://YOUR_NAME.github.io/quicklist/
+GitHub owner:      quicklist-shopping
+GitHub repository: quicklist-shopping.github.io
+Website:           https://quicklist-shopping.github.io/
 ```
 
-If you choose another repository name, that name takes the place of `quicklist` in the URL. You do not need to configure the URL prefix manually: the existing deployment workflow handles it.
+The existing `.github/workflows/deploy.yml` recognizes this special repository name and automatically sets Vite's base path to `/`. You do **not** need to edit `vite.config.ts` or set `VITE_BASE_PATH` yourself. A normal repository such as `quicklist` would instead have a `/quicklist/` path; the same workflow also handles that case.
 
 > **Free GitHub Pages:** GitHub Free supports Pages in **public** repositories. The site and its JavaScript are publicly downloadable, but Firestore Security Rules will restrict list data. If publishing the list of approved email addresses in the repository is unacceptable, stop and choose a different access-control design before going further.
 
@@ -46,7 +48,7 @@ You need these fields from the block:
 | `appId` | `VITE_FIREBASE_APP_ID` |
 | `messagingSenderId` | `VITE_FIREBASE_MESSAGING_SENDER_ID` (if present) |
 
-**Copy the values only**, without JavaScript quotes or commas. Keep `authDomain` as Firebase supplied it (normally `YOUR_PROJECT_ID.firebaseapp.com`); do **not** change it to `YOUR_NAME.github.io`. The code is already set up to read these values; do not paste the `firebaseConfig` snippet into a source file. You can ignore other fields like `measurementId` and `storageBucket`.
+**Copy the values only**, without JavaScript quotes or commas. Keep `authDomain` as Firebase supplied it (normally `YOUR_PROJECT_ID.firebaseapp.com`); do **not** change it to `quicklist-shopping.github.io`. The code is already set up to read these values; do not paste the `firebaseConfig` snippet into a source file. You can ignore other fields like `measurementId` and `storageBucket`.
 
 These web-config values are **not secret keys**. They will be visible in the published app. The actual data protection comes from Firestore Security Rules.
 
@@ -56,7 +58,7 @@ These web-config values are **not secret keys**. They will be visible in the pub
 2. Click **Get started**, then open the **Sign-in method** tab.
 3. Open the **Google** provider, switch it **on**, select the requested **project support email**, and click **Save**.
 4. Leave other sign-in providers off; this app requires Google sign-in.
-5. Open Authentication's **Settings → Authorized domains**. Add **`YOUR_NAME.github.io`**. Enter just the hostname: **no** `https://`, `/quicklist/`, or `#/`.
+5. Open Authentication's **Settings → Authorized domains**. Add **`quicklist-shopping.github.io`**. Enter just the hostname: **no** `https://`, path, or `#/`.
 6. If you later use a custom site domain, add that hostname as well. If you want to test with the *real* Firebase project on your own computer, also authorize your local hostname as needed (such as `localhost` or `127.0.0.1`). You do **not** need this for emulator-only local testing.
 
 The sign-in button uses a Google **popup**. Allow popups for your site if your browser blocks it. An unauthorized user might still sign in to Firebase Authentication, but the Firestore rules must reject all of their list reads and writes.
@@ -124,7 +126,7 @@ If the CLI reports that you are not authorized, check the Google account selecte
 
 ## 9. Create an empty GitHub repository and set its Actions variables
 
-1. On [GitHub](https://github.com/new), create a **public** repository named `quicklist` (or your chosen name), owned by `YOUR_NAME`.
+1. On [GitHub](https://github.com/new), create a **public** repository named `quicklist-shopping.github.io`, owned by `quicklist-shopping`. **If you have already created it, use that repository and skip creation.**
 2. Make it **empty**: do not generate a README, `.gitignore`, or license in the GitHub creation wizard. `source_new/` already has its own files.
 3. In the new GitHub repository, open **Settings → Secrets and variables → Actions → Variables** (the **Variables** tab, not **Secrets**). Click **New repository variable** once for each name below:
 
@@ -151,11 +153,11 @@ git init -b main
 git add .
 git status --short  # Check what will be uploaded before committing.
 git commit -m "Initial Quicklist app"
-git remote add origin https://github.com/YOUR_NAME/quicklist.git
+git remote add origin https://github.com/quicklist-shopping/quicklist-shopping.github.io.git
 git push -u origin main
 ```
 
-Replace the example GitHub name and repository name in the remote URL. Authenticate with GitHub if prompted. The workflow runs on pushes to **`main`**. If you use another default branch, update `branches: [main]` in `.github/workflows/deploy.yml` first.
+If you have already initialized the repository or set its remote, skip those commands; check with `git remote -v`. Authenticate with GitHub if prompted. The workflow runs on pushes to **`main`**. If you use another default branch, update `branches: [main]` in `.github/workflows/deploy.yml` first.
 
 **Before committing**, verify that `git status --short` does **not** include `.env.local`, `node_modules/`, `dist/`, Firebase logs, or any service-account file. `.gitignore` excludes these generated files. Never upload private credentials or an Admin SDK service-account JSON file.
 
@@ -165,25 +167,26 @@ Replace the example GitHub name and repository name in the remote URL. Authentic
 
 1. In your GitHub repository, open the **Actions** tab and select **Build and deploy Quicklist**.
 2. Wait for the green check. The workflow installs packages, checks email/config settings, runs TypeScript and tests (including the Java-based rules tests), builds the SPA, and publishes `dist/` to Pages.
-3. Return to **Settings → Pages**, and click **Visit site**. For a repository named `quicklist`, the URL should be:
+3. Return to **Settings → Pages**, and click **Visit site**. Your root Pages URL should be:
 
    ```text
-   https://YOUR_NAME.github.io/quicklist/
+   https://quicklist-shopping.github.io/
    ```
 
 4. Sign in with an approved Google account. Click the new-list icon, add an item, and copy the full URL (including the `#/LIST_ID` part). Open that URL in a second browser or private window and verify that an approved account can access it. Check that an unapproved account cannot.
 
-**Share the full list URL**, for example `https://YOUR_NAME.github.io/quicklist/#/a1b2c3`. The `#` part is deliberate: it lets a shared list URL survive a refresh on GitHub Pages without a web server or reverse proxy.
+**Share the full list URL**, for example `https://quicklist-shopping.github.io/#/a1b2c3`. The `#` part is deliberate: it lets a shared list URL survive a refresh on GitHub Pages without a web server or reverse proxy.
 
 ## 12. Later changes and useful checks
 
 - **Add or remove a person:** Edit `firestore.rules`, run `npm run test:rules`, deploy rules again with the command in step 8, edit the `VITE_ALLOWED_EMAILS` GitHub variable to match, then push the rules change or manually rerun the GitHub workflow. Deploy the new rules promptly: the frontend list is only a convenience check, not the protection. The old Firebase Auth session may remain signed in, but rules should deny future list operations after removal.
 - **Local emulators (not production):** Keep `.env.local` based on `env.example` with `VITE_USE_FIREBASE_EMULATORS=true`, then run `npm run dev:emulator`. The local emulator's lists and Google accounts are unrelated to production Firebase.
 - **Optional local test against real Firebase:** In your ignored `.env.local`, set the five `VITE_FIREBASE_*` fields from step 3, `VITE_ALLOWED_EMAILS` from step 6, and `VITE_USE_FIREBASE_EMULATORS=false`, then run `npm run dev`. Remember to authorize the local hostname in Authentication (step 4). Change the emulator flag back to `true` afterwards to avoid using production data by accident.
-- **Cannot sign in / `auth/unauthorized-domain`:** Check the GitHub Pages hostname in Firebase Authentication → Authorized domains. The hostname is `YOUR_NAME.github.io`, without protocol, path, or hash. Make sure you copied Firebase's original `authDomain` into the GitHub variable.
+- **Cannot sign in / `auth/unauthorized-domain`:** Check the GitHub Pages hostname in Firebase Authentication → Authorized domains. The hostname is `quicklist-shopping.github.io`, without protocol, path, or hash. Make sure you copied Firebase's original `authDomain` into the GitHub variable.
 - **“Access denied” after sign-in:** Confirm you used the same Google email in `firestore.rules` and the GitHub variable, deployed the rules, and rebuilt Pages. Only an email verified through Google is accepted.
 - **“Permission denied” when editing:** Inspect the published Firestore Rules and GitHub Actions test run; never solve this by changing production to Test mode.
-- **Blank page or missing CSS/JS on GitHub Pages:** Make sure the app files, especially `package.json` and `.github/workflows/deploy.yml`, are at the new GitHub repository root. The workflow builds with `VITE_BASE_PATH=/<REPOSITORY>/` for a project site.
+- **Blank page with `application/octet-stream` for `/src/main.tsx`:** GitHub Pages is serving the unbuilt source files, not the Vite build. In **Settings → Pages → Build and deployment → Source**, choose **GitHub Actions** instead of **Deploy from a branch**. Check **Actions → Build and deploy Quicklist** for a successful run. The deployed page should load `/assets/index-*.js`, not `/src/main.tsx`. Make sure the latest `.github/workflows/deploy.yml` includes the `github-pages` environment so `deploy-pages` can finish.
+- **Blank page or missing CSS/JS after the Actions workflow succeeds:** Make sure `package.json` and `.github/workflows/deploy.yml` are at the repository root. For this special `<owner>.github.io` repository, the workflow builds with `VITE_BASE_PATH=/`. Check that the site is `https://quicklist-shopping.github.io/`, without a repository subpath.
 - **No unexpected costs:** Stay on **Spark**, do not link a billing account, and monitor usage in Firebase console → **Usage and billing** and **Firestore Database → Usage**. This version does **not** automatically delete lists after 24 hours. Firestore TTL deletes require billing and are **not** enabled here.
 
 ## Official references
