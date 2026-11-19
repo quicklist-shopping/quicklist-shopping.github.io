@@ -7,6 +7,7 @@ import type { User } from 'firebase/auth';
 import { useList } from './useList';
 import { ItemRow } from './ItemRow';
 import { ListErrorDialog } from './ListErrorDialog';
+import { ShareListButton } from './ShareListButton';
 
 export function ListPage({ listId, user, online }: { listId: string; user: User; online: boolean }) {
   const { list, status, error, addItem, removeItem, cycleItem } = useList(listId, user);
@@ -66,6 +67,7 @@ export function ListPage({ listId, user, online }: { listId: string; user: User;
   return (
     <section className="list-content" aria-label="Shopping list">
       <Paper className="list-card" elevation={0}>
+        <ShareListButton />
         <form onSubmit={submit}>
           <TextField
             label="Add item"

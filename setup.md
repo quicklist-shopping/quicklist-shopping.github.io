@@ -1,6 +1,6 @@
 # Quicklist setup: Firebase free tier + GitHub Pages
 
-Follow these steps in order. You need **one Google account** for Firebase, **one GitHub account**, and the email addresses of the people who may use Quicklist. Firebase does not require a separate kind of account: you sign in to Firebase with your Google account.
+Follow these steps in order. You need **one Google account** for Firebase, **one GitHub account**, and the email addresses of the people who may use Quicklist. Firebase does not require a separate kind of account: you sign in to Firebase with your Google account. For the local npm commands, use **Node.js 24.15 or newer (Node 24 LTS recommended)**; Firestore emulator tests also need Java 21 or newer.
 
 This guide assumes that **the contents of `source_new/` become the root of a new GitHub repository**. Do **not** upload the old `source/quicklist/` project or put `source_new/` inside another repository unless you also change the workflow paths. The existing `.github/workflows/deploy.yml` expects `package.json`, `firestore.rules`, and `src/` directly at the repository root.
 

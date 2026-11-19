@@ -4,7 +4,7 @@ A collaborative shopping-list SPA built with React, TypeScript, Vite, Firebase A
 
 ## Run locally (no deployment or production Firebase project required)
 
-Requirements: Node.js 20+ and Java 21+ (the Firestore emulator runs on Java).
+Requirements: Node.js 24.15+ (Node 24 LTS recommended) and Java 21+ (the Firestore emulator runs on Java). Recent versions of the Firebase rules testing library and jsdom require Node 24 or later.
 
 ```sh
 npm ci

@@ -76,6 +76,23 @@ body {
   box-shadow: 0 10px 28px rgba(42, 55, 111, 0.08) !important;
 }
 
+.share-list-control {
+  display: none;
+  margin: -8px -8px 8px 0;
+  text-align: right;
+}
+
+.share-list-control .MuiButton-root {
+  text-transform: none;
+  font-weight: 600;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .share-list-control {
+    display: block;
+  }
+}
+
 .add-item-button {
   color: white !important;
   background-color: #4054a3 !important;
