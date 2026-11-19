@@ -11,11 +11,16 @@ import { AccessDeniedPage } from './features/auth/AccessDeniedPage';
 import { NewListButton } from './features/lists/NewListButton';
 import { ListPage } from './features/lists/ListPage';
 import { useOnlineStatus } from './app/useOnlineStatus';
-import { indigo } from '@mui/material/colors';
 import './App.css';
 
 const theme = createTheme({
-  palette: { background: { default: indigo[100] } },
+  palette: {
+    primary: { main: '#4054a3' },
+    secondary: { main: '#4054a3' },
+    background: { default: '#f4f5fb', paper: '#ffffff' },
+    text: { primary: '#26324b', secondary: '#55617b' },
+  },
+  shape: { borderRadius: 12 },
 });
 
 function ListRoute({ user, online }: { user: User; online: boolean }) {

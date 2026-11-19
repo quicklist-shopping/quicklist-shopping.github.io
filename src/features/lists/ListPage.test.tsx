@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User } from 'firebase/auth';
+import { Timestamp } from 'firebase/firestore';
+import { StaleItemStateError } from '../../services/firebase/lists';
 import { MemoryRouter } from 'react-router-dom';
 import { ListPage } from './ListPage';
 import { useList } from './useList';
@@ -50,6 +52,34 @@ describe('ListPage add-item input', () => {
     expect(screen.queryByText('Add an item to get started.')).not.toBeInTheDocument();
   });
 
+  it('provides a visible add button and submits exactly once when clicked', async () => {
+    const addItem = vi.fn(async () => undefined);
+    renderEmptyList(addItem);
+
+    const input = screen.getByRole('textbox', { name: 'Add item' });
+    const button = screen.getByRole('button', { name: 'Add item to list' });
+    expect(button).toBeDisabled();
+    fireEvent.change(input, { target: { value: 'Milk' } });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    await waitFor(() => expect(addItem).toHaveBeenCalledTimes(1));
+    expect(addItem).toHaveBeenCalledWith('Milk');
+    await waitFor(() => expect(input).toHaveValue(''));
+  });
+
+  it('keeps input focus when the plus button is tapped from the input', async () => {
+    const addItem = vi.fn(async () => undefined);
+    renderEmptyList(addItem);
+    const input = screen.getByRole('textbox', { name: 'Add item' });
+    const button = screen.getByRole('button', { name: 'Add item to list' });
+    fireEvent.change(input, { target: { value: 'Milk' } });
+    input.focus();
+    fireEvent.pointerDown(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(addItem).toHaveBeenCalledOnce());
+    expect(input).toHaveFocus();
+  });
+
   it('keeps the focused input enabled and focused while saving and after success', async () => {
     const request = deferred<void>();
     const addItem = vi.fn(() => request.promise);
@@ -88,6 +118,26 @@ describe('ListPage add-item input', () => {
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
     expect(addItem).toHaveBeenCalledTimes(2);
     expect(addItem).toHaveBeenLastCalledWith('Bread');
+  });
+
+  it('shows a non-blocking message on a conflicting item state change', async () => {
+    const onCycle = vi.fn().mockRejectedValue(new StaleItemStateError());
+    vi.mocked(useList).mockReturnValue({
+      list: { id: 'list-id', items: [{ id: 'milk', name: 'Milk', state: 'UNKNOWN', updatedAt: new Timestamp(1, 0) }] },
+      status: 'ready', error: '',
+      addItem: vi.fn(async () => undefined),
+      removeItem: vi.fn(async () => undefined),
+      cycleItem: onCycle,
+    });
+    render(
+      <MemoryRouter>
+        <ListPage listId="list-id" user={user} online />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Milk, unknown. Tap to change status/ }));
+    expect(await screen.findByText(/Another person changed this item/)).toBeInTheDocument();
+    expect(onCycle).toHaveBeenCalledOnce();
   });
 
   it('keeps the submitted text available to retry after a failed write', async () => {

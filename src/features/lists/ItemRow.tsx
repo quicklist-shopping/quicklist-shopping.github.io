@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { CircularProgress, IconButton, ListItem, ListItemButton, ListItemIcon, ListItemText } from '@mui/material';
+import { CircularProgress, IconButton, ListItem, ListItemButton, ListItemIcon, ListItemText, Tooltip } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpIcon from '@mui/icons-material/Help';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
-import type { ListItem as ListItemModel } from '../../services/firebase/lists';
+import { StaleItemStateError, type ListItem as ListItemModel } from '../../services/firebase/lists';
 
 interface ItemRowProps {
   item: ListItemModel;
-  onCycle: (id: string) => Promise<void>;
+  onCycle: (item: ListItemModel) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onError: (message: string) => void;
+  onConflict: (message: string) => void;
   disabled: boolean;
 }
 
@@ -20,15 +21,25 @@ const stateIcon = {
   UNAVAILABLE: <ErrorIcon />,
 } as const;
 
-export function ItemRow({ item, onCycle, onRemove, onError, disabled }: ItemRowProps) {
+const stateLabel = {
+  UNKNOWN: 'To buy',
+  IN_CART: 'In cart',
+  UNAVAILABLE: 'Unavailable',
+} as const;
+
+export function ItemRow({ item, onCycle, onRemove, onError, onConflict, disabled }: ItemRowProps) {
   const [busy, setBusy] = useState(false);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
     try {
       await action();
-    } catch {
-      onError('Unable to update this item. Check your connection and try again.');
+    } catch (error) {
+      if (error instanceof StaleItemStateError) {
+        onConflict(error.message);
+      } else {
+        onError('Unable to update this item. Check your connection and try again.');
+      }
     } finally {
       setBusy(false);
     }
@@ -39,25 +50,30 @@ export function ItemRow({ item, onCycle, onRemove, onError, disabled }: ItemRowP
       disablePadding
       className={`quicklist-item${item.state === 'IN_CART' ? ' quicklist-item--in-cart' : ''}${item.state === 'UNAVAILABLE' ? ' quicklist-item--unavailable' : ''}`}
       secondaryAction={
-        <IconButton
-          edge="end"
-          aria-label={`Remove ${item.name}`}
-          disabled={busy || disabled}
-          onClick={() => void run(() => onRemove(item.id))}
-        >
-          <HighlightOffIcon fontSize="large" />
-        </IconButton>
+        <Tooltip title={`Remove ${item.name}`}>
+          <span>
+            <IconButton
+              edge="end"
+              aria-label={`Remove ${item.name}`}
+              disabled={busy || disabled || !item.updatedAt}
+              onClick={() => void run(() => onRemove(item.id))}
+              size="small"
+            >
+              <HighlightOffIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
       }
     >
       <ListItemButton
-        onClick={() => void run(() => onCycle(item.id))}
-        disabled={busy || disabled}
-        aria-label={`${item.name}, ${item.state.toLowerCase().replace('_', ' ')}`}
+        onClick={() => void run(() => onCycle(item))}
+        disabled={busy || disabled || !item.updatedAt}
+        aria-label={`${item.name}, ${item.state.toLowerCase().replace('_', ' ')}. Tap to change status`}
       >
-        <ListItemIcon>
-          {busy ? <CircularProgress size={25} color="secondary" /> : stateIcon[item.state]}
+        <ListItemIcon className="item-state-icon">
+          {busy ? <CircularProgress size={24} color="secondary" /> : stateIcon[item.state]}
         </ListItemIcon>
-        <ListItemText primary={item.name} />
+        <ListItemText primary={item.name} secondary={stateLabel[item.state]} />
       </ListItemButton>
     </ListItem>
   );

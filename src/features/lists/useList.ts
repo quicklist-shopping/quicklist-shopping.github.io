@@ -5,6 +5,7 @@ import {
   cycleItemState,
   removeItem as removeItemFromFirestore,
   subscribeToList,
+  type ListItem,
   type QuickList,
 } from '../../services/firebase/lists';
 
@@ -38,6 +39,6 @@ export function useList(listId: string, user: User) {
     error,
     addItem: (name: string) => addItemToFirestore(listId, user.uid, name),
     removeItem: (itemId: string) => removeItemFromFirestore(listId, itemId, user.uid),
-    cycleItem: (itemId: string) => cycleItemState(listId, itemId, user.uid),
+    cycleItem: (item: ListItem) => cycleItemState(listId, item, user.uid),
   };
 }

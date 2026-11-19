@@ -8,7 +8,7 @@ service cloud.firestore {
         && request.auth.token.email is string
         // Add the exact, verified Google account emails before deploying rules.
         // The empty list intentionally denies everyone until the owners are specified.
-        && request.auth.token.email in ['krzysztof.kakol89@gmail.com', 'katarzyna.blocka@gmail.com'];
+        && request.auth.token.email in ['krzysztof.kakol89@gmail.com', 'katarzyna.blocka@gmail.com', 'kakole61@gmail.com'];
     }
 
     function listPath(listId) {

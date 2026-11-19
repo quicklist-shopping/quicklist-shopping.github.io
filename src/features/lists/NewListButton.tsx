@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CircularProgress, IconButton, Tooltip } from '@mui/material';
-import FiberNewIcon from '@mui/icons-material/FiberNew';
+import { Button, CircularProgress, Tooltip } from '@mui/material';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import type { User } from 'firebase/auth';
 import { createList } from '../../services/firebase/lists';
 import { ListErrorDialog } from './ListErrorDialog';
@@ -30,11 +30,19 @@ export function NewListButton({ user, online }: { user: User; online: boolean })
 
   return (
     <>
-      <Tooltip title="Create a new list">
+      <Tooltip title="Start a new shopping list">
         <span>
-          <IconButton color="secondary" aria-label="Create a new list" onClick={create} disabled={busy || !online} size="large">
-            {busy ? <CircularProgress size={28} color="secondary" /> : <FiberNewIcon fontSize="large" />}
-          </IconButton>
+          <Button
+            className="new-list-button"
+            variant="contained"
+            color="secondary"
+            aria-label="Create a new list"
+            startIcon={busy ? <CircularProgress size={18} color="inherit" /> : <AddRoundedIcon />}
+            onClick={create}
+            disabled={busy || !online}
+          >
+            {busy ? 'Creating…' : 'New list'}
+          </Button>
         </span>
       </Tooltip>
       {error && <ListErrorDialog message={error} onClose={() => setError('')} />}

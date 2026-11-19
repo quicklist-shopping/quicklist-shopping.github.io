@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CircularProgress, List as MaterialList, TextField } from '@mui/material';
+import { Alert, CircularProgress, IconButton, InputAdornment, List as MaterialList, Paper, Snackbar, TextField } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
 import type { User } from 'firebase/auth';
 import { useList } from './useList';
 import { ItemRow } from './ItemRow';
@@ -12,7 +13,10 @@ export function ListPage({ listId, user, online }: { listId: string; user: User;
   const [newItem, setNewItem] = useState('');
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [conflict, setConflict] = useState('');
   const submittingRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wasInputFocusedRef = useRef(false);
   const navigate = useNavigate();
 
   const addCurrentItem = async () => {
@@ -44,7 +48,7 @@ export function ListPage({ listId, user, online }: { listId: string; user: User;
   };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+    if (event.target === inputRef.current && event.key === 'Enter' && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void addCurrentItem();
     }
@@ -61,34 +65,66 @@ export function ListPage({ listId, user, online }: { listId: string; user: User;
 
   return (
     <section className="list-content" aria-label="Shopping list">
-      <form onSubmit={(event) => void submit(event)}>
-        <TextField
-          label="Add item"
-          value={newItem}
-          onChange={(event) => setNewItem(event.target.value)}
-          onKeyDown={handleInputKeyDown}
-          variant="standard"
-          fullWidth
-          inputProps={{ maxLength: 200, 'aria-label': 'Add item' }}
-          disabled={!online}
-        />
-      </form>
-      {saving && <CircularProgress color="secondary" size={24} sx={{ mt: 1 }} aria-label="Adding item" />}
-      {actionError && <ListErrorDialog message={actionError} onClose={() => setActionError('')} />}
-      {list.items.length > 0 && (
-        <MaterialList component="nav" className="shopping-list" aria-label="List items">
-          {list.items.map((item) => (
-            <ItemRow
-              key={item.id}
-              item={item}
-              onCycle={cycleItem}
-              onRemove={removeItem}
-              onError={setActionError}
-              disabled={!online}
-            />
-          ))}
-        </MaterialList>
-      )}
+      <Paper className="list-card" elevation={0}>
+        <form onSubmit={submit}>
+          <TextField
+            label="Add item"
+            value={newItem}
+            inputRef={inputRef}
+            onChange={(event) => setNewItem(event.target.value)}
+            onKeyDown={handleInputKeyDown}
+            variant="outlined"
+            size="small"
+            fullWidth
+            slotProps={{
+              htmlInput: { maxLength: 200, 'aria-label': 'Add item' },
+              input: {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      type="submit"
+                      aria-label="Add item to list"
+                      className="add-item-button"
+                      disabled={!online || saving || !newItem.trim()}
+                      onPointerDown={() => {
+                        wasInputFocusedRef.current = document.activeElement === inputRef.current;
+                      }}
+                      onClick={() => {
+                        // Refocus during the click gesture, not after the async write:
+                        // mobile browsers may reject a later attempt to open the keyboard.
+                        if (wasInputFocusedRef.current) inputRef.current?.focus();
+                        wasInputFocusedRef.current = false;
+                      }}
+                    >
+                      {saving ? <CircularProgress size={20} color="inherit" /> : <AddIcon />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              },
+            }}
+            disabled={!online}
+          />
+        </form>
+        {actionError && <ListErrorDialog message={actionError} onClose={() => setActionError('')} />}
+        {list.items.length > 0 && (
+          <MaterialList component="nav" className="shopping-list" aria-label="List items">
+            {list.items.map((item) => (
+              <ItemRow
+                key={item.id}
+                item={item}
+                onCycle={cycleItem}
+                onRemove={removeItem}
+                onError={setActionError}
+                onConflict={setConflict}
+                disabled={!online}
+              />
+            ))}
+          </MaterialList>
+        )}
+      </Paper>
+      <Snackbar open={Boolean(conflict)} autoHideDuration={5500} onClose={() => setConflict('')}>
+        <Alert severity="info" variant="filled" onClose={() => setConflict('')}>{conflict}</Alert>
+      </Snackbar>
     </section>
   );
 }

@@ -7,6 +7,7 @@ body,
 }
 
 body {
+  background-image: linear-gradient(180deg, #e7eafa 0%, #f4f5fb 340px);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -26,18 +27,41 @@ body {
 .app-header {
   width: 100%;
   max-width: 360px;
-  min-height: 56px;
-  position: relative;
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+.new-list-button {
+  min-height: 44px;
+  padding: 8px 20px !important;
+  border-radius: 999px !important;
+  font-weight: 700 !important;
+  text-transform: none !important;
+  letter-spacing: 0.01em !important;
+  box-shadow: 0 5px 14px rgba(54, 72, 151, 0.18) !important;
+}
+
+.new-list-button:hover {
+  box-shadow: 0 7px 18px rgba(54, 72, 151, 0.24) !important;
+}
+
+.new-list-button.Mui-disabled {
+  box-shadow: none !important;
+}
+
 .account-button {
   position: absolute !important;
   z-index: 1;
-  top: 16px;
+  top: 20px;
   right: 16px;
+  color: #435383 !important;
+  background-color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.account-button:hover {
+  background-color: #ffffff !important;
 }
 
 .list-content {
@@ -45,30 +69,77 @@ body {
   max-width: 360px;
 }
 
+.list-card {
+  border: 1px solid #e2e6f3;
+  border-radius: 18px !important;
+  padding: 18px;
+  box-shadow: 0 10px 28px rgba(42, 55, 111, 0.08) !important;
+}
+
+.add-item-button {
+  color: white !important;
+  background-color: #4054a3 !important;
+  border-radius: 10px !important;
+  width: 34px;
+  height: 34px;
+}
+
+.add-item-button:hover {
+  background-color: #30448d !important;
+}
+
+.add-item-button.Mui-disabled {
+  color: #98a4c8 !important;
+  background-color: #edf0fa !important;
+}
+
 .shopping-list {
   width: 100%;
-  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
   padding: 0;
 }
 
 .quicklist-item {
-  border-radius: 4px;
+  border-radius: 12px;
+  background-color: #f0f2fa;
+  overflow: hidden;
+  transition: background-color 160ms ease;
 }
 
 .quicklist-item--in-cart {
-  background-color: #f1f8e9;
-}
-
-.quicklist-item--in-cart:hover {
-  background-color: #dcedc8;
+  background-color: #e6f4ed;
 }
 
 .quicklist-item--unavailable {
-  background-color: #ffebee;
+  background-color: #fcebea;
 }
 
-.quicklist-item--unavailable:hover {
-  background-color: #ffcdd2;
+.quicklist-item .MuiListItemButton-root:hover {
+  background-color: rgba(54, 72, 151, 0.06);
+}
+
+.quicklist-item .item-state-icon {
+  min-width: 40px;
+  color: #50639d;
+}
+
+.quicklist-item--in-cart .item-state-icon {
+  color: #216d51;
+}
+
+.quicklist-item--unavailable .item-state-icon {
+  color: #a33444;
+}
+
+.quicklist-item .MuiListItemText-secondary {
+  font-size: 0.75rem;
+}
+
+.quicklist-item .MuiListItemSecondaryAction-root {
+  right: 10px;
 }
 
 .auth-card {
@@ -76,6 +147,8 @@ body {
   width: 100%;
   max-width: 360px;
   padding: 24px;
+  border: 1px solid #e2e6f3;
+  border-radius: 18px !important;
 }
 
 .setup-message {
@@ -90,7 +163,7 @@ body {
   }
 
   .account-button {
-    top: 12px;
+    top: 18px;
     right: 12px;
   }
 }
