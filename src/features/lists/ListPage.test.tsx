@@ -2,7 +2,6 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { User } from 'firebase/auth';
 import { Timestamp } from 'firebase/firestore';
-import { StaleItemStateError } from '../../services/firebase/lists';
 import { MemoryRouter } from 'react-router-dom';
 import { ListPage } from './ListPage';
 import { useList } from './useList';
@@ -120,8 +119,8 @@ describe('ListPage add-item input', () => {
     expect(addItem).toHaveBeenLastCalledWith('Bread');
   });
 
-  it('shows a non-blocking message on a conflicting item state change', async () => {
-    const onCycle = vi.fn().mockRejectedValue(new StaleItemStateError());
+  it('does not show a conflict message when an item change is silently refreshed', async () => {
+    const onCycle = vi.fn().mockResolvedValue(undefined);
     vi.mocked(useList).mockReturnValue({
       list: { id: 'list-id', items: [{ id: 'milk', name: 'Milk', state: 'UNKNOWN', updatedAt: new Timestamp(1, 0) }] },
       status: 'ready', error: '',
@@ -136,8 +135,8 @@ describe('ListPage add-item input', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /Milk, unknown. Tap to change status/ }));
-    expect(await screen.findByText(/Another person changed this item/)).toBeInTheDocument();
-    expect(onCycle).toHaveBeenCalledOnce();
+    await waitFor(() => expect(onCycle).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('keeps the submitted text available to retry after a failed write', async () => {

@@ -2,6 +2,8 @@ import {
   collection,
   doc,
   documentId,
+  getDocFromServer,
+  getDocsFromServer,
   onSnapshot,
   orderBy,
   query,
@@ -27,7 +29,7 @@ export interface ListItem {
 
 export class StaleItemStateError extends Error {
   constructor() {
-    super('Another person changed this item. Wait for its latest status, then tap again.');
+    super('The item revision is no longer current.');
     this.name = 'StaleItemStateError';
   }
 }
@@ -123,6 +125,33 @@ function isItemState(value: unknown): value is ItemState {
   return value === 'UNKNOWN' || value === 'IN_CART' || value === 'UNAVAILABLE';
 }
 
+function readItem(id: string, data: Record<string, unknown>): ListItem {
+  if (typeof data.name !== 'string' || !isItemState(data.state)
+    || (data.updatedAt !== null && !(data.updatedAt instanceof Timestamp))) {
+    throw new Error('This list contains an invalid item.');
+  }
+  return { id, name: data.name, state: data.state, updatedAt: data.updatedAt };
+}
+
+function listItemsQuery(listId: string) {
+  return query(
+    collection(firestore(), 'lists', listId, 'items'),
+    orderBy('createdAt', 'asc'),
+    orderBy(documentId(), 'asc'),
+  );
+}
+
+// Bypass the local Firestore cache when an attempted write finds stale data.
+// Re-read the entire list, not just the item whose update was rejected.
+export async function fetchListFromServer(listId: string): Promise<QuickList | null> {
+  const listRef = doc(firestore(), 'lists', listId);
+  const parent = await getDocFromServer(listRef);
+  if (!parent.exists()) return null;
+  if (parent.data().schemaVersion !== 1) throw new Error('This list has an unsupported or invalid format.');
+  const items = await getDocsFromServer(listItemsQuery(listId));
+  return { id: listId, items: items.docs.map((item) => readItem(item.id, item.data())) };
+}
+
 export function subscribeToList(
   listId: string,
   onList: (list: QuickList | null) => void,
@@ -130,11 +159,7 @@ export function subscribeToList(
 ): Unsubscribe {
   const database = firestore();
   const listRef = doc(database, 'lists', listId);
-  const itemsQuery = query(
-    collection(listRef, 'items'),
-    orderBy('createdAt', 'asc'),
-    orderBy(documentId(), 'asc'),
-  );
+  const itemsQuery = listItemsQuery(listId);
 
   let metadata: { exists: boolean; valid: boolean } | undefined;
   let items: ListItem[] | undefined;
@@ -156,7 +181,10 @@ export function subscribeToList(
 
   const unsubscribeList = onSnapshot(
     listRef,
+    { includeMetadataChanges: true },
     (snapshot) => {
+      // Cached or local speculative data can temporarily lag a concurrent write.
+      if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
       const firstParentSnapshot = metadata === undefined;
       const data = snapshot.data();
       metadata = {
@@ -173,16 +201,11 @@ export function subscribeToList(
 
   const unsubscribeItems = onSnapshot(
     itemsQuery,
+    { includeMetadataChanges: true },
     (snapshot) => {
+      if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
       try {
-        items = snapshot.docs.map((itemDoc) => {
-          const data = itemDoc.data();
-          if (typeof data.name !== 'string' || !isItemState(data.state)
-            || (data.updatedAt !== null && !(data.updatedAt instanceof Timestamp))) {
-            throw new Error('This list contains an invalid item.');
-          }
-          return { id: itemDoc.id, name: data.name, state: data.state, updatedAt: data.updatedAt };
-        });
+        items = snapshot.docs.map((itemDoc) => readItem(itemDoc.id, itemDoc.data()));
         emitItems();
       } catch (error) {
         onError(error instanceof Error ? error : new Error('Unable to read list items.'));

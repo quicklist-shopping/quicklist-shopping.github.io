@@ -2,12 +2,11 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Timestamp } from 'firebase/firestore';
 import { ItemRow } from './ItemRow';
-import { StaleItemStateError } from '../../services/firebase/lists';
 
 const item = { id: 'milk-id', name: 'Milk', state: 'UNKNOWN' as const, updatedAt: new Timestamp(1, 0) };
 
 const props = (onCycle = vi.fn().mockResolvedValue(undefined), onRemove = vi.fn().mockResolvedValue(undefined)) => ({
-  item, onCycle, onRemove, onError: vi.fn(), onConflict: vi.fn(), disabled: false,
+  item, onCycle, onRemove, onError: vi.fn(), disabled: false,
 });
 
 describe('ItemRow', () => {
@@ -29,14 +28,13 @@ describe('ItemRow', () => {
     expect(callbacks.onCycle).not.toHaveBeenCalled();
   });
 
-  it('reports a stale click without opening the general write-error dialog', async () => {
-    const callbacks = props(vi.fn().mockRejectedValue(new StaleItemStateError()));
+  it('shows a general error only if the write or reload actually fails', async () => {
+    const callbacks = props(vi.fn().mockRejectedValue(new Error('Network unavailable')));
     render(<ItemRow {...callbacks} />);
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Milk, unknown. Tap to change status/ }));
     });
-    expect(callbacks.onConflict).toHaveBeenCalledOnce();
-    expect(callbacks.onError).not.toHaveBeenCalled();
+    expect(callbacks.onError).toHaveBeenCalledOnce();
   });
 });

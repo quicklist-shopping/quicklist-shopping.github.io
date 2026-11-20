@@ -84,7 +84,7 @@ The URL fragment stays in the browser, so refreshing a shared list loads the pub
 
 ## Data and retention
 
-Lists live at `lists/{listId}` and each list's items live in `lists/{listId}/items/{itemId}`. Each item is an independent document so simultaneous edits to different items do not overwrite one another. State changes use a Firestore transaction and compare the item's observed `updatedAt` timestamp and state before cycling it: if someone else changed it first, the stale tap is rejected and a message asks the user to wait for the latest state before tapping again. This uses the existing item fields, so no schema or Security Rules migration is required. Add/remove operations update the item and list activity timestamp atomically.
+Lists live at `lists/{listId}` and each list's items live in `lists/{listId}/items/{itemId}`. Each item is an independent document so simultaneous edits to different items do not overwrite one another. State changes use a Firestore transaction and compare the item's observed `updatedAt` timestamp and state before cycling it. If a stale tap is rejected, the app silently reloads the whole list from the Firestore server (not its local cache). Live listeners ignore cached and uncommitted snapshots, so the UI only displays server-confirmed list changes. This uses the existing item fields, so no schema or Security Rules migration is required. Add/remove operations update the item and list activity timestamp atomically.
 
 There is no automatic deletion in this first implementation. The previous 24-hour cleanup behavior is deferred; Firestore TTL is asynchronous, does not recursively delete item subcollections, and may add cost. Decide on a trusted cleanup mechanism before promising expiry.
 

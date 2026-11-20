@@ -4,14 +4,13 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpIcon from '@mui/icons-material/Help';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
-import { StaleItemStateError, type ListItem as ListItemModel } from '../../services/firebase/lists';
+import type { ListItem as ListItemModel } from '../../services/firebase/lists';
 
 interface ItemRowProps {
   item: ListItemModel;
   onCycle: (item: ListItemModel) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onError: (message: string) => void;
-  onConflict: (message: string) => void;
   disabled: boolean;
 }
 
@@ -27,19 +26,15 @@ const stateLabel = {
   UNAVAILABLE: 'Unavailable',
 } as const;
 
-export function ItemRow({ item, onCycle, onRemove, onError, onConflict, disabled }: ItemRowProps) {
+export function ItemRow({ item, onCycle, onRemove, onError, disabled }: ItemRowProps) {
   const [busy, setBusy] = useState(false);
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
     try {
       await action();
-    } catch (error) {
-      if (error instanceof StaleItemStateError) {
-        onConflict(error.message);
-      } else {
-        onError('Unable to update this item. Check your connection and try again.');
-      }
+    } catch {
+      onError('Unable to update this item. Check your connection and try again.');
     } finally {
       setBusy(false);
     }

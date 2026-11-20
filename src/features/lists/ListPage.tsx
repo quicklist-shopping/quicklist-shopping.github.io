@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, CircularProgress, IconButton, InputAdornment, List as MaterialList, Paper, Snackbar, TextField } from '@mui/material';
+import { CircularProgress, IconButton, InputAdornment, List as MaterialList, Paper, TextField } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import type { User } from 'firebase/auth';
 import { useList } from './useList';
@@ -14,7 +14,6 @@ export function ListPage({ listId, user, online }: { listId: string; user: User;
   const [newItem, setNewItem] = useState('');
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState('');
-  const [conflict, setConflict] = useState('');
   const submittingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const wasInputFocusedRef = useRef(false);
@@ -117,16 +116,12 @@ export function ListPage({ listId, user, online }: { listId: string; user: User;
                 onCycle={cycleItem}
                 onRemove={removeItem}
                 onError={setActionError}
-                onConflict={setConflict}
                 disabled={!online}
               />
             ))}
           </MaterialList>
         )}
       </Paper>
-      <Snackbar open={Boolean(conflict)} autoHideDuration={5500} onClose={() => setConflict('')}>
-        <Alert severity="info" variant="filled" onClose={() => setConflict('')}>{conflict}</Alert>
-      </Snackbar>
     </section>
   );
 }
