@@ -1,6 +1,6 @@
 # Quicklist
 
-A collaborative shopping-list SPA built with React, TypeScript, Vite, Firebase Authentication, and Cloud Firestore. The static site is designed for GitHub Pages; Firestore snapshot listeners provide live updates between approved users.
+A collaborative shopping-list SPA built with React, TypeScript, Vite, Firebase Authentication, and Cloud Firestore. The static site is designed for GitHub Pages; a list-document listener triggers full server refreshes for approved users.
 
 ## Run locally (no deployment or production Firebase project required)
 
@@ -84,7 +84,7 @@ The URL fragment stays in the browser, so refreshing a shared list loads the pub
 
 ## Data and retention
 
-Lists live at `lists/{listId}` and each list's items live in `lists/{listId}/items/{itemId}`. Each item is an independent document so simultaneous edits to different items do not overwrite one another. State changes use a Firestore transaction and compare the item's observed `updatedAt` timestamp and state before cycling it. If a stale tap is rejected, the app silently reloads the whole list from the Firestore server (not its local cache). Live listeners ignore cached and uncommitted snapshots, so the UI only displays server-confirmed list changes. This uses the existing item fields, so no schema or Security Rules migration is required. Add/remove operations update the item and list activity timestamp atomically.
+Lists live at `lists/{listId}` and each list's items live in `lists/{listId}/items/{itemId}`. Each item is an independent document so simultaneous edits to different items do not overwrite one another. State changes use a Firestore transaction and compare the item's observed `updatedAt` timestamp and state before cycling it. If a stale tap is rejected, the app silently reloads the whole list from the Firestore server (not its local cache). The list-document listener detects activity, then reads **all** the items; it no longer combines independent parent and item snapshots. The refresh checks the parent's revision before and after reading items and retries if a write happened during the read. Overlapping notifications queue another refresh rather than dropping updates. A foreground app also revalidates on focus, reconnection, and every minute to recover from missed mobile browser events. This uses the existing item fields, so no schema or Security Rules migration is required. Add/remove operations update the item and list activity timestamp atomically.
 
 There is no automatic deletion in this first implementation. The previous 24-hour cleanup behavior is deferred; Firestore TTL is asynchronous, does not recursively delete item subcollections, and may add cost. Decide on a trusted cleanup mechanism before promising expiry.
 
@@ -94,4 +94,4 @@ There is no automatic deletion in this first implementation. The previous 24-hou
 - Production rules allow exact list-document reads and item reads/writes, but deny collection-wide list discovery and parent-list deletion.
 - The local emulator rules are deliberately more permissive and must never be deployed.
 - GitHub Actions' Firebase variables are available to the public build. They contain public web config and the UI allowlist only; rules enforce access.
-- Quotas and pricing can change. Snapshot listener reads, reconnects, and rule lookups consume Firestore usage; review Firebase's current limits before production use.
+- Quotas and pricing can change. Full-list server reads occur on changes, focus/reconnection, and every minute while visible; they cost more reads than an item-only listener. Review Firebase's current limits before production use.

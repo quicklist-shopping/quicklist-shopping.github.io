@@ -4,11 +4,11 @@ import { FirebaseError } from 'firebase/app';
 import {
   addItem as addItemToFirestore,
   cycleItemState,
-  fetchListFromServer,
   StaleItemStateError,
   removeItem as removeItemFromFirestore,
   subscribeToList,
   type ListItem,
+  type ListSubscription,
   type QuickList,
 } from '../../services/firebase/lists';
 
@@ -18,52 +18,40 @@ export function useList(listId: string, user: User) {
   const [list, setList] = useState<QuickList | null>(null);
   const [status, setStatus] = useState<ListStatus>('loading');
   const [error, setError] = useState('');
-  const subscriptionVersion = useRef(0);
-  const refreshVersion = useRef(0);
+  const subscriptionRef = useRef<{ listId: string; subscription: ListSubscription } | null>(null);
 
   useEffect(() => {
-    const version = ++subscriptionVersion.current;
     setList(null);
     setStatus('loading');
     setError('');
-    const unsubscribe = subscribeToList(
+    const subscription = subscribeToList(
       listId,
       (nextList) => {
-        if (subscriptionVersion.current !== version || refreshVersion.current > 0) return;
         setList(nextList);
         setStatus(nextList ? 'ready' : 'not-found');
       },
       (reason) => {
-        if (subscriptionVersion.current !== version) return;
         setError(reason.message || 'Unable to load this list.');
         setStatus('error');
       },
     );
+    subscriptionRef.current = { listId, subscription };
     return () => {
-      ++subscriptionVersion.current;
-      refreshVersion.current = 0;
-      unsubscribe();
+      subscription.unsubscribe();
+      if (subscriptionRef.current?.subscription === subscription) subscriptionRef.current = null;
     };
   }, [listId]);
 
   const cycleItem = async (item: ListItem) => {
-    const version = subscriptionVersion.current;
     try {
       await cycleItemState(listId, item, user.uid);
     } catch (reason) {
       if (!(reason instanceof StaleItemStateError)
         && !(reason instanceof FirebaseError && reason.code === 'aborted')) throw reason;
-      // The old app handled a version conflict by fetching the whole list.
-      // Do the same with a server-only read; don't show a conflict message.
-      const refresh = ++refreshVersion.current;
-      try {
-        const latest = await fetchListFromServer(listId);
-        if (subscriptionVersion.current === version && refreshVersion.current === refresh) {
-          setList(latest);
-          setStatus(latest ? 'ready' : 'not-found');
-        }
-      } finally {
-        if (refreshVersion.current === refresh) refreshVersion.current = 0;
+      // A stale write is silently dropped. Use the same serialized, full-list
+      // server refresh as the live listener; never replay the failed change.
+      if (subscriptionRef.current?.listId === listId) {
+        await subscriptionRef.current.subscription.refresh();
       }
     }
   };

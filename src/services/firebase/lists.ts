@@ -11,8 +11,8 @@ import {
   serverTimestamp,
   setDoc,
   Timestamp,
+  waitForPendingWrites,
   writeBatch,
-  type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './client';
 
@@ -31,6 +31,12 @@ export class StaleItemStateError extends Error {
   constructor() {
     super('The item revision is no longer current.');
     this.name = 'StaleItemStateError';
+  }
+}
+
+class ConcurrentRefreshError extends Error {
+  constructor() {
+    super('Unable to refresh the list right now. Try again.');
   }
 }
 
@@ -141,83 +147,169 @@ function listItemsQuery(listId: string) {
   );
 }
 
-// Bypass the local Firestore cache when an attempted write finds stale data.
-// Re-read the entire list, not just the item whose update was rejected.
+// Every item write also changes the parent list's updatedAt. Read the parent
+// again after the query so a concurrent edit cannot produce a mixed-version
+// list (new parent plus old items, or vice versa).
 export async function fetchListFromServer(listId: string): Promise<QuickList | null> {
   const listRef = doc(firestore(), 'lists', listId);
-  const parent = await getDocFromServer(listRef);
-  if (!parent.exists()) return null;
-  if (parent.data().schemaVersion !== 1) throw new Error('This list has an unsupported or invalid format.');
-  const items = await getDocsFromServer(listItemsQuery(listId));
-  return { id: listId, items: items.docs.map((item) => readItem(item.id, item.data())) };
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const before = await getDocFromServer(listRef);
+    if (!before.exists()) return null;
+    if (before.data().schemaVersion !== 1) throw new Error('This list has an unsupported or invalid format.');
+    if (before.metadata.hasPendingWrites) {
+      await waitForPendingWrites(firestore());
+      continue;
+    }
+    const items = await getDocsFromServer(listItemsQuery(listId));
+    const after = await getDocFromServer(listRef);
+    if (!after.exists()) return null;
+    if (after.metadata.hasPendingWrites || items.metadata.hasPendingWrites) {
+      await waitForPendingWrites(firestore());
+      continue;
+    }
+    const firstRevision = before.data().updatedAt;
+    const lastRevision = after.data().updatedAt;
+    if (firstRevision instanceof Timestamp && lastRevision instanceof Timestamp
+      && firstRevision.isEqual(lastRevision)) {
+      return { id: listId, items: items.docs.map((item) => readItem(item.id, item.data())) };
+    }
+  }
+  throw new ConcurrentRefreshError();
 }
 
+export interface ListSubscription {
+  refresh: () => Promise<void>;
+  unsubscribe: () => void;
+}
+
+// The parent document is the change notification. Its activity timestamp is
+// updated in the same atomic write as every item, so we then fetch *all* items
+// from the server, rather than composing two independent listener snapshots.
 export function subscribeToList(
   listId: string,
   onList: (list: QuickList | null) => void,
   onError: (error: Error) => void,
-): Unsubscribe {
-  const database = firestore();
-  const listRef = doc(database, 'lists', listId);
-  const itemsQuery = listItemsQuery(listId);
+): ListSubscription {
+  const listRef = doc(firestore(), 'lists', listId);
+  let disposed = false;
+  let running = false;
+  let queued = false;
+  let concurrentReadRetries = 0;
+  let lastNotified: Timestamp | null | undefined;
+  let loaded = false;
+  let waiters: Array<{ resolve: () => void; reject: (error: Error) => void }> = [];
 
-  let metadata: { exists: boolean; valid: boolean } | undefined;
-  let items: ListItem[] | undefined;
-  let finished = false;
-
-  const emitStatus = () => {
-    if (finished || !metadata) return;
-    if (!metadata.exists) {
-      onList(null);
-    } else if (!metadata.valid) {
-      onError(new Error('This list has an unsupported or invalid format.'));
+  const settle = (error?: Error) => {
+    const pending = waiters;
+    waiters = [];
+    for (const waiter of pending) {
+      if (error) waiter.reject(error);
+      else waiter.resolve();
     }
   };
 
-  const emitItems = () => {
-    if (finished || !metadata || !metadata.exists || !metadata.valid || !items) return;
-    onList({ id: listId, items });
+  const withTimeout = async <T,>(request: Promise<T>): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        request,
+        new Promise<T>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Unable to refresh the list. Check your connection.')), 15000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   };
 
-  const unsubscribeList = onSnapshot(
+  const drain = async () => {
+    if (running || disposed) return;
+    running = true;
+    try {
+      while (queued && !disposed) {
+        queued = false;
+        try {
+          const list = await withTimeout(fetchListFromServer(listId));
+          if (disposed) break;
+          // If another update arrived mid-read, discard this result and read
+          // again. Never present a snapshot that we already know is outdated.
+          if (queued) continue;
+          concurrentReadRetries = 0;
+          loaded = true;
+          onList(list);
+          settle();
+        } catch (reason) {
+          if (disposed) break;
+          // Continuous edits can invalidate several complete reads. Retry
+          // quietly rather than treating an ordinary race as a user error.
+          if (reason instanceof ConcurrentRefreshError && ++concurrentReadRetries < 3) {
+            queued = true;
+            continue;
+          }
+          concurrentReadRetries = 0;
+          const error = reason instanceof Error ? reason : new Error('Unable to refresh the list.');
+          loaded = false;
+          onError(error);
+          settle(error);
+        }
+      }
+    } finally {
+      running = false;
+      if (queued && !disposed) void drain();
+    }
+  };
+
+  const refresh = (): Promise<void> => {
+    if (disposed) return Promise.resolve();
+    queued = true;
+    const pending = new Promise<void>((resolve, reject) => waiters.push({ resolve, reject }));
+    void drain();
+    return pending;
+  };
+
+  const requestRefresh = () => { void refresh().catch(() => {}); };
+  const onWake = () => { if (!document.hidden) requestRefresh(); };
+  const unsubscribeParent = onSnapshot(
     listRef,
     { includeMetadataChanges: true },
     (snapshot) => {
-      // Cached or local speculative data can temporarily lag a concurrent write.
       if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
-      const firstParentSnapshot = metadata === undefined;
-      const data = snapshot.data();
-      metadata = {
-        exists: snapshot.exists(),
-        valid: !snapshot.exists() || data?.schemaVersion === 1,
-      };
-      emitStatus();
-      // Parent activity timestamps can arrive before their item updates. Do
-      // not re-emit the last items snapshot on every parent update.
-      if (firstParentSnapshot) emitItems();
-    },
-    (error) => onError(error),
-  );
-
-  const unsubscribeItems = onSnapshot(
-    itemsQuery,
-    { includeMetadataChanges: true },
-    (snapshot) => {
-      if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
-      try {
-        items = snapshot.docs.map((itemDoc) => readItem(itemDoc.id, itemDoc.data()));
-        emitItems();
-      } catch (error) {
-        onError(error instanceof Error ? error : new Error('Unable to read list items.'));
+      const revision = snapshot.exists() ? snapshot.data().updatedAt : null;
+      if (snapshot.exists() && !(revision instanceof Timestamp)) {
+        onError(new Error('This list has an invalid revision.'));
+        return;
       }
+      if (loaded && lastNotified === null && revision === null) return;
+      if (loaded && lastNotified instanceof Timestamp && revision instanceof Timestamp
+        && lastNotified.isEqual(revision)) return;
+      lastNotified = revision;
+      requestRefresh();
     },
-    (error) => onError(error),
+    (error) => {
+      loaded = false;
+      onError(error);
+    },
   );
+  window.addEventListener('focus', onWake);
+  window.addEventListener('online', onWake);
+  document.addEventListener('visibilitychange', onWake);
+  // A foreground tab also revalidates periodically if a mobile browser has
+  // silently stopped delivering listener events without a focus/online event.
+  const revalidate = setInterval(() => {
+    if (!document.hidden && navigator.onLine) requestRefresh();
+  }, 60000);
 
-  return () => {
-    finished = true;
-    unsubscribeList();
-    unsubscribeItems();
+  return {
+    refresh,
+    unsubscribe: () => {
+      disposed = true;
+      unsubscribeParent();
+      window.removeEventListener('focus', onWake);
+      window.removeEventListener('online', onWake);
+      document.removeEventListener('visibilitychange', onWake);
+      clearInterval(revalidate);
+      settle();
+    },
   };
 }
 

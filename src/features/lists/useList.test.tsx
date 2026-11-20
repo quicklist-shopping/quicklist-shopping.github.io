@@ -1,11 +1,10 @@
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { Timestamp } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
 import {
   cycleItemState,
-  fetchListFromServer,
   StaleItemStateError,
   subscribeToList,
   type QuickList,
@@ -15,7 +14,6 @@ import { useList } from './useList';
 vi.mock('../../services/firebase/lists', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/firebase/lists')>()),
   cycleItemState: vi.fn(),
-  fetchListFromServer: vi.fn(),
   subscribeToList: vi.fn(),
 }));
 
@@ -32,45 +30,45 @@ const latest: QuickList = {
   ],
 };
 let onList: (list: QuickList | null) => void;
+let refresh: Mock<() => Promise<void>>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  refresh = vi.fn(async () => onList(latest));
   vi.mocked(subscribeToList).mockImplementation((_id, onChange) => {
     onList = onChange;
-    return vi.fn();
+    return { refresh, unsubscribe: vi.fn() };
   });
 });
 
 describe('refresh after a stale status write', () => {
-  it('silently fetches the whole list from the server and does not repeat the write', async () => {
+  it('silently requests a serialized whole-list refresh and never repeats the write', async () => {
     vi.mocked(cycleItemState).mockRejectedValue(new StaleItemStateError());
-    vi.mocked(fetchListFromServer).mockResolvedValue(latest);
     const { result } = renderHook(() => useList('shopping', user));
     act(() => onList(original));
 
     await act(async () => result.current.cycleItem(original.items[0]));
 
     expect(cycleItemState).toHaveBeenCalledExactlyOnceWith('shopping', original.items[0], user.uid);
-    expect(fetchListFromServer).toHaveBeenCalledExactlyOnceWith('shopping');
+    expect(refresh).toHaveBeenCalledOnce();
     expect(result.current.list).toEqual(latest);
     expect(result.current.status).toBe('ready');
   });
 
   it('also refreshes after transaction contention exhausts Firestore retries', async () => {
     vi.mocked(cycleItemState).mockRejectedValue(new FirebaseError('aborted', 'transaction contention'));
-    vi.mocked(fetchListFromServer).mockResolvedValue(latest);
     const { result } = renderHook(() => useList('shopping', user));
     act(() => onList(original));
 
     await act(async () => result.current.cycleItem(original.items[0]));
-    expect(fetchListFromServer).toHaveBeenCalledOnce();
+    expect(refresh).toHaveBeenCalledOnce();
     expect(result.current.list).toEqual(latest);
   });
 
-  it('does not replay a listener state received while reloading', async () => {
+  it('continues to display live updates while a refresh is in flight', async () => {
     vi.mocked(cycleItemState).mockRejectedValue(new StaleItemStateError());
-    let finishReload!: (list: QuickList) => void;
-    vi.mocked(fetchListFromServer).mockImplementation(() => new Promise((resolve) => { finishReload = resolve; }));
+    let finishReload!: () => void;
+    refresh.mockImplementation(() => new Promise<void>((resolve) => { finishReload = resolve; }));
     const { result } = renderHook(() => useList('shopping', user));
     act(() => onList(original));
 
@@ -79,17 +77,17 @@ describe('refresh after a stale status write', () => {
       transition = result.current.cycleItem(original.items[0]);
       await Promise.resolve();
     });
-    act(() => onList(original));
+    act(() => onList(latest));
+    expect(result.current.list).toEqual(latest);
     await act(async () => {
-      finishReload(latest);
+      finishReload();
       await transition;
     });
-    expect(result.current.list).toEqual(latest);
   });
 
   it('propagates a real server-read failure instead of silently claiming success', async () => {
     vi.mocked(cycleItemState).mockRejectedValue(new StaleItemStateError());
-    vi.mocked(fetchListFromServer).mockRejectedValue(new Error('Server unreachable'));
+    refresh.mockRejectedValue(new Error('Server unreachable'));
     const { result } = renderHook(() => useList('shopping', user));
     act(() => onList(original));
     await expect(result.current.cycleItem(original.items[0])).rejects.toThrow('Server unreachable');
